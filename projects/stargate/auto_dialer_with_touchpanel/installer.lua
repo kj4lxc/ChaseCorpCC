@@ -1,6 +1,6 @@
 -- installer.lua
 
-local BASE_URL = "https://raw.githubusercontent.com/kj4lxc/ChaseCorpCC/main/projects/stargate/auto_dialer_with_panel/"
+local BASE_URL = "https://raw.githubusercontent.com/kj4lxc/ChaseCorpCC/main/projects/stargate/auto_dialer_with_touchpanel/"
 
 local files = {
   "dialer.lua",
@@ -20,8 +20,6 @@ end
 
 -- Download files
 for _, file in ipairs(files) do
-  print("Downloading " .. file)
-  print("heychase look here")
   print(BASE_URL..file)
   local h = http.get(BASE_URL .. file)
   if not h then
