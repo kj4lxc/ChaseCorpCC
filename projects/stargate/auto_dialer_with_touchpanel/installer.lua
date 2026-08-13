@@ -10,7 +10,7 @@ local files = {
 local installDir = "/stargateDialer"
 
 if not http then
-    error("HTTP API is disabled.")
+  error("HTTP API is disabled.")
 end
 
 -- Create install directory
@@ -21,7 +21,7 @@ end
 -- Download files
 for _, file in ipairs(files) do
   print("Downloading " .. file)
-
+  print(BASE_URL..file)
   local h = http.get(BASE_URL .. file)
   if not h then
     error("Failed to download " .. file)
