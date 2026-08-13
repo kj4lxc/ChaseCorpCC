@@ -388,17 +388,19 @@ local function BuildButtons()
 
         if not closestToMe
             or id ~= closestToMe.id then
+            if gate.public then
+              local button = {}
 
-            local button = {}
+              button.id = id
+              button.name = gate.name
+              button.gate = gate
 
-            button.id = id
-            button.name = gate.name
-            button.gate = gate
-
-            table.insert(
-                buttons,
-                button
-            )
+              table.insert(
+                  buttons,
+                  button
+              )
+            end
+            
 
         end
 
