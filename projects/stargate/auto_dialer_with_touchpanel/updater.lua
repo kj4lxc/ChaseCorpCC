@@ -27,7 +27,7 @@ local function checkForUpdates()
       return false, "Remote version not found."
   end
   
-  local currentDialer = fs.open("dialer.lua", "w")
+  local currentDialer = fs.open("/stargateDialer/dialer.lua", "r")
   local current = currentDialer.readAll()
   currentDialer.close()
 
@@ -39,11 +39,11 @@ local function checkForUpdates()
 
   print(("Updating %s -> %s"):format(currentVer, remoteVersion))
 
-  local dialer = fs.open("dialer.lua", "w")
+  local dialer = fs.open("/stargateDialer/dialer.lua", "w")
   dialer.write(newSourceDialer)
   dialer.close()
 
-  local monitor = fs.open("monitorProgram.lua", "w")
+  local monitor = fs.open("/stargateDialer/monitorProgram.lua", "w")
   monitor.write(newSourceMonitor)
   monitor.close()
   print("Update complete.")
@@ -51,4 +51,9 @@ local function checkForUpdates()
   os.reboot()
 end
 
-checkForUpdates()
+print(checkForUpdates())
+
+print("done")
+local didUpdate, Output = checkForUpdates()
+print(Output)
+shell.run("/stargateDialer/dialer.lua")

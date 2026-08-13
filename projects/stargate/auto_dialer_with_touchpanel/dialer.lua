@@ -535,7 +535,7 @@ local function Onboard()
 end
 modem.open(slaveRecieve)
 local config = {}
-local configPath = "config.json"
+local configPath = "/stargateDialer/config.json"
 config = LoadJson(configPath)
 if not config.uuid then
   config = Onboard()
@@ -568,10 +568,6 @@ if not config.uuid then
 end
 
 
-local file = fs.open("gates.json", "r")
-local contents = file.readAll()
-file.close()
-gateDB = textutils.unserializeJSON(contents)
 os.queueEvent("done")
 
 local packet = {}
@@ -594,8 +590,7 @@ while true do
         connectedAddress = connectedAddress..index.."-"
       else
         connectedAddress = connectedAddress..index
-      end
-      
+      end 
     end
     sleep(.2)
     os.queueEvent(
@@ -606,8 +601,6 @@ while true do
               ["Address"] = connectedAddress
           }
       )
-    print(side)
-    print(name)
     dial(address)
   elseif event == "stargate_chevron_engaged" then
     if not message then
@@ -634,8 +627,7 @@ while true do
       tempGates[config.uuid] = nil
       _G.gateDB = tempGates
       if startup then
-        checkForUpdates()
-        shell.run("bg monitorProgram.lua")
+        shell.run("bg /stargateDialer/monitorProgram.lua")
       end
       startup = false
     end
