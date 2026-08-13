@@ -4,6 +4,7 @@ local BASE_URL = "https://raw.githubusercontent.com/kj4lxc/ChaseCorpCC/main/proj
 
 local files = {
   "dialer.lua",
+  "updater.lua",
   "monitorProgram.lua"
 }
 
