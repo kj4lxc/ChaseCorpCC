@@ -21,6 +21,7 @@ end
 -- Download files
 for _, file in ipairs(files) do
   print("Downloading " .. file)
+  print("heychase look here")
   print(BASE_URL..file)
   local h = http.get(BASE_URL .. file)
   if not h then
