@@ -321,7 +321,7 @@ local function buildGateList()
     local list = {}
 
     for uuid, gate in pairs(gates) do
-
+      if gate.public then
         table.insert(
             list,
             {
@@ -330,6 +330,8 @@ local function buildGateList()
                 address = gate.address
             }
         )
+      end
+        
     end
 
     --------------------------------------------------
