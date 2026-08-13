@@ -676,10 +676,18 @@ while true do
       modem.transmit(slaveRecieve, slaveRecieve, me)
     end
     if channel == slaveRecieve and message.type == "remoteDial" and message.gateInfo.from == config.uuid then
-      local gate = gateDB[message.gateInfo.to]
-      local address = gate.address
-      connectedName = gate.name
-      connectedAddress = ""
+      local address = {}
+      if message.gateInfo.to == "manual" then
+        print("manual dial")
+        connectedName = "MANUAL DIAL"
+        address = message.gateInfo.manualAddress
+      else
+        local gate = gateDB[message.gateInfo.to]
+        address = gate.address
+        connectedName = gate.name
+        connectedAddress = ""        
+      end
+      
       for i, index in pairs(address) do
         if i == #address then
           break
