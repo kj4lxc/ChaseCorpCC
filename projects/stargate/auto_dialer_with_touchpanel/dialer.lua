@@ -321,7 +321,7 @@ local feedback = {
     }
 }
 local gateDB = {}
-local VERSION = "1.0.0"
+local VERSION = "1.0.1"
 
 local function dialMilky(address)
   local addressLength = #address    
@@ -685,7 +685,7 @@ while true do
         local gate = gateDB[message.gateInfo.to]
         address = gate.address
         connectedName = gate.name
-        connectedAddress = ""        
+        connectedAddress = "" 
       end
       
       for i, index in pairs(address) do
