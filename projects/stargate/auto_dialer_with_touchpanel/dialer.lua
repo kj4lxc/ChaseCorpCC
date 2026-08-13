@@ -1,7 +1,4 @@
 local interface = peripheral.find("advanced_crystal_interface") or peripheral.find("crystal_interface") or peripheral.find("basic_interface")
-local VERSION = "1.0"
-local DIALERURL = "https://raw.githubusercontent.com/youruser/yourrepo/main/startup.lua"
-local MONITORURL = "https://raw.githubusercontent.com/youruser/yourrepo/main/startup.lua"
 local modem = peripheral.find("modem")
 local slaveSend = 54385
 local slaveRecieve = 54384
@@ -323,6 +320,7 @@ local feedback = {
     }
 }
 local gateDB = {}
+local VERSION = "1.0.0"
 
 local function dialMilky(address)
   local addressLength = #address    
@@ -505,48 +503,6 @@ local function CompareTables(a, b)
     return true
 end
 
-local function getVersion(source)
-    return source:match('local%s+VERSION%s*=%s*"([^"]+)"')
-end
-
-local function checkForUpdates()
-  local dialerResponse = http.get(UPDATE_URL)
-  if not dialerResponse then
-    return false, "Unable to contact update server."
-  end
-  local monitorResponse = http.get(UPDATE_URL)
-  if not monitorResponse then
-    return false, "Unable to contact update server."
-  end
-
-  local newSourceDialer = dialerResponse.readAll()
-  dialerResponse.close()
-  local newSourceMonitor = monitorResponse.readAll()
-  monitorResponse.close()
-
-  local remoteVersion = getVersion(newSourceDialer)
-
-  if not remoteVersion then
-      return false, "Remote version not found."
-  end
-
-  if remoteVersion == VERSION then
-      return false, "Already up to date."
-  end
-
-  print(("Updating %s -> %s"):format(VERSION, remoteVersion))
-
-  local dialer = fs.open(shell.getRunningProgram(), "w")
-  dialer.write(newSourceDialer)
-  dialer.close()
-
-  local monitor = fs.open("monitorProgram.lua", "w")
-  monitor.write(newSourceMonitor)
-  monitor.close()
-  print("Update complete.")
-  sleep(1)
-  os.reboot()
-end
 
 local function Onboard()
  write("Gate name: ")

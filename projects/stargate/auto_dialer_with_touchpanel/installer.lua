@@ -36,15 +36,11 @@ print("Creating startup.lua")
 
 local startup = fs.open("/startup.lua", "w")
 startup.write([[
-shell.run("/myProgram/main.lua")
+fs.delete("/installer.lua")
+shell.run("/stargateDialer/updater.lua")
 ]])
 startup.close()
 
--- Delete installer
-local me = shell.getRunningProgram()
-
-print("Removing installer...")
-fs.delete(me)
 
 print("Rebooting in 2 seconds...")
 sleep(2)
