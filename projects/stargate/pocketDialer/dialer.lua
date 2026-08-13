@@ -104,9 +104,6 @@ end
 --------------------------------------------------
 
 local function GetGateDB()
-
-    print("getting gates")
-
     local packet = {}
 
     packet.type = "update"
