@@ -5,6 +5,7 @@ local slaveRecieve = 54384
 local updateKey = "oF94citYqr46iN45J8Z1gQ"
 local connectedName = ""
 local connectedAddress = ""
+local remoteDialed = false
 local feedback = {
     [0] = {
         name = "NONE",
@@ -354,88 +355,14 @@ local function dialOther(address)
       local symbol = address[chevron]
       interface.engageSymbol(symbol)
       local code, message = interface.getRecentFeedback()
-      print(feedback[code].text)    
+      print(feedback[code].text)
     end 
-end
-
-local function gateHandler(address)
-  local timer = os.startTimer(60)
-  local addressLength = #address 
-  local statusUpdate = true
-  while statusUpdate do
-
-    local event, side, channel, replyChannel, message, distance = os.pullEvent()
-    if event == "stargate_chevron_engaged" then
-      local numEngaged = interface.getChevronsEngaged()
-      if numEngaged == addressLength then
-        local data = "Chevron "..numEngaged.." LOCKED!"
-        print(data)
-        os.queueEvent("wormhole data", data)
-      else
-        local data = "Chevron "..numEngaged.." encoded."
-        print(data)
-        os.queueEvent("wormhole data", data)
-      end
-      timer = os.startTimer(60)
-    elseif event == "stargate_disconnected" then
-      local data = feedback[channel].text
-      print(data)
-      os.queueEvent("wormhole data", data)
-      sleep(5)
-      os.queueEvent("done")
-      break
-    elseif event == "stargate_reset" then
-      local data = "stargate_reset: "..replyChannel
-      print(data)
-      os.queueEvent("wormhole data", data)
-      sleep(5)
-      os.queueEvent("done")
-      break
-    elseif event == "stargate_deconstructing_entity" then
-      local data = "Outbound Traveler: "..replyChannel
-      print(data)
-      os.queueEvent("wormhole data", data)
-      timer = os.startTimer(60)
-    elseif event == "stargate_reconstructing_entity" then
-      timer = os.startTimer(60)
-      local data = "Incoming traveler: "..replyChannel
-      print(data)
-      os.queueEvent("wormhole data", data)
-    elseif event == "stargate_outgoing_wormhole" then
-      sleep(2)
-      os.queueEvent(
-          "wormhole data",
-          {
-              ["Status"] = "Wormhole Established",
-              ["Destination"] = connectedName,
-              ["Address"] = connectedAddress
-          }
-      )
-    elseif event == "timer" then
-      if side == timer then
-        local stargateStatus = interface.isStargateConnected()
-        if stargateStatus then
-          timer = os.startTimer(60)
-          local data = "timer event but wormhole still active... waiting..."
-          print(data)
-          os.queueEvent("wormhole data", data)
-          sleep(5)
-        else
-          print("no activity detected from gate and gate does not show active breaking loop...")
-          os.queueEvent("done")
-          break
-        end
-      end
-    end
-  end
 end
 
 local function dial(address)
   interface.disconnectStargate()
   local gateType = tostring(interface.getStargateType())
-  print(gateType)
   if gateType == "sgjourney:classic_stargate" or gateType == "sgjourney:milky_way_stargate" then
-    print("i am taking milky way")
     parallel.waitForAll(
       function()
         dialMilky(address)
@@ -445,7 +372,6 @@ local function dial(address)
       end
     )
   else
-    print("i am dialing other")
     parallel.waitForAll(
       function()
         dialOther(address)
@@ -567,6 +493,118 @@ if not config.uuid then
   SaveJson(configPath, config)
 end
 
+function gateHandler(address)
+  local timer = os.startTimer(60)
+  local addressLength = #address 
+  local statusUpdate = true
+  local packet = {}
+  packet.id = config.uuid
+  packet.type = "dialerCallback"
+  packet.callbackData = nil
+  while statusUpdate do
+
+    local event, side, channel, replyChannel, message, distance = os.pullEvent()
+    if event == "stargate_chevron_engaged" then
+      local numEngaged = interface.getChevronsEngaged()
+      if numEngaged == addressLength then
+        local data = "Chevron "..numEngaged.." LOCKED!"
+        
+        os.queueEvent("wormhole data", data)
+        if remoteDialed then
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+        end
+      else
+        local data = "Chevron "..numEngaged.." encoded."
+        
+        os.queueEvent("wormhole data", data)
+        if remoteDialed then
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+        end
+      end
+      timer = os.startTimer(60)
+    elseif event == "stargate_disconnected" then
+      local data = feedback[channel].text
+      
+      os.queueEvent("wormhole data", data)
+      if remoteDialed then
+          packet.type = "dialerCallbackTerm"
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+      end
+      sleep(5)
+      os.queueEvent("done")
+      remoteDialed = false
+      break
+    elseif event == "stargate_reset" then
+      local data = "stargate_reset: "..replyChannel
+      
+      os.queueEvent("wormhole data", data)
+      if remoteDialed then
+          packet.type = "dialerCallbackTerm"
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+      end
+      sleep(5)
+      os.queueEvent("done")
+      remoteDialed = false
+      break
+    elseif event == "stargate_deconstructing_entity" then
+      local data = "Outbound Traveler: "..replyChannel
+      os.queueEvent("wormhole data", data)
+      if remoteDialed then
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+      end
+      timer = os.startTimer(60)
+    elseif event == "stargate_reconstructing_entity" then
+      timer = os.startTimer(60)
+      local data = "Incoming traveler: "..replyChannel
+      if remoteDialed then
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+      end
+      os.queueEvent("wormhole data", data)
+    elseif event == "stargate_outgoing_wormhole" then
+      sleep(2)
+      local data = {
+              ["Status"] = "Wormhole Established",
+              ["Destination"] = connectedName,
+              ["Address"] = connectedAddress
+          }
+      os.queueEvent(
+          "wormhole data", data    
+      )
+      if remoteDialed then
+          packet.callbackData = data
+          modem.transmit(slaveRecieve, slaveRecieve, packet)
+      end
+    elseif event == "timer" then
+      if side == timer then
+        local stargateStatus = interface.isStargateConnected()
+        if stargateStatus then
+          timer = os.startTimer(60)
+          local data = "timer event but wormhole still active... waiting..."
+          
+          os.queueEvent("wormhole data", data)
+          sleep(5)
+        else
+          local data = "no activity detected from gate and gate does not show active breaking loop..."
+          
+          os.queueEvent("done")
+          if remoteDialed then
+            packet.type = "dialerCallbackTerm"
+            packet.callbackData = data
+            modem.transmit(slaveRecieve, slaveRecieve, packet)
+          end
+          remoteDialed = false
+          break
+        end
+      end
+    end
+  end
+end
 
 os.queueEvent("done")
 
@@ -605,7 +643,7 @@ while true do
   elseif event == "stargate_chevron_engaged" then
     if not message then
       local data = "Chevron "..channel.." encoded."
-      print(data)
+      
       os.queueEvent("wormhole data", data)
     end
   elseif event == "stargate_outgoing_wormhole" then
@@ -616,9 +654,7 @@ while true do
     )
   elseif event == "stargate_incoming_wormhole" then
     gateHandler(channel)
-    print(channel)
   elseif event == "modem_message" then
-    print(channel, textutils.serializeJSON(message))
     if channel == slaveRecieve and message.key == updateKey and message.type == "update" then
       print("recieved gate update...")
       gateDB = message.data
@@ -630,6 +666,47 @@ while true do
         shell.run("bg /stargateDialer/monitorProgram.lua")
       end
       startup = false
+    end
+    if channel == slaveRecieve and message.type == "distanceCheck" then
+      local me = {}
+      me.type = "distanceResponse"
+      me.to = message.id
+      me.id = config.uuid
+      sleep(.25)
+      modem.transmit(slaveRecieve, slaveRecieve, me)
+    end
+    if channel == slaveRecieve and message.type == "remoteDial" and message.gateInfo.from == config.uuid then
+      local gate = gateDB[message.gateInfo.to]
+      local address = gate.address
+      connectedName = gate.name
+      connectedAddress = ""
+      for i, index in pairs(address) do
+        if i == #address then
+          break
+        end
+        if i < #address-1 then
+          connectedAddress = connectedAddress..index.."-"
+        else
+          connectedAddress = connectedAddress..index
+        end 
+      end
+      sleep(.2)
+      local wormHoleData = {
+                ["Status"] = "Dialing Sequence",
+                ["Destination"] = connectedName,
+                ["Address"] = connectedAddress
+            }
+      os.queueEvent(
+            "wormhole data",
+            wormHoleData
+        )
+      local packet = {}
+      packet.id = config.uuid
+      packet.type = "dialerCallback"
+      packet.callbackData = wormHoleData
+      modem.transmit(slaveRecieve, slaveRecieve, packet)
+      dial(address)
+      remoteDialed = true
     end
   end
 end
