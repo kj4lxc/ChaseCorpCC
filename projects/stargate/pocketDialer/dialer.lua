@@ -3,8 +3,9 @@ local DISTANCE_REFRESH_INTERVAL = 10
 local DIAL_TIMEOUT = 120
 local slaveSend = 54385
 local slaveRecieve = 54384
-local VERSION = "1.0.0"
+local VERSION = "1.0.1"
 local gateDB = {}
+os.setComputerLabel("PocketDialer v."..VERSION)
 
 local updatePass = "oF94citYqr46iN45J8Z1gQ"
 local closestToMe = ""
@@ -104,6 +105,7 @@ end
 --------------------------------------------------
 
 local function GetGateDB()
+
     local packet = {}
 
     packet.type = "update"
@@ -209,7 +211,6 @@ local function FindClosestGate()
                 end
 
 
-                -- Reset timeout
                 timer = os.startTimer(.25)
 
             end
@@ -363,6 +364,26 @@ local function BuildButtons()
     buttons = {}
 
 
+    --------------------------------------------------
+    -- MANUAL DIALING IS ALWAYS FIRST
+    --------------------------------------------------
+
+    local manualButton = {}
+
+    manualButton.id = "manual"
+    manualButton.name = "MANUAL DIALING"
+    manualButton.manual = true
+
+    table.insert(
+        buttons,
+        manualButton
+    )
+
+
+    --------------------------------------------------
+    -- ADD GATE BUTTONS
+    --------------------------------------------------
+
     for id, gate in pairs(gateDB) do
 
         if not closestToMe
@@ -371,9 +392,7 @@ local function BuildButtons()
             local button = {}
 
             button.id = id
-
             button.name = gate.name
-
             button.gate = gate
 
             table.insert(
@@ -389,7 +408,7 @@ end
 
 
 --------------------------------------------------
--- DRAW GATE BUTTON
+-- DRAW BUTTON
 --------------------------------------------------
 
 local function DrawButton(
@@ -415,9 +434,19 @@ local function DrawButton(
     -- Button background
     --------------------------------------------------
 
-    term.setBackgroundColor(
-        colors.blue
-    )
+    if button.manual then
+
+        term.setBackgroundColor(
+            colors.gray
+        )
+
+    else
+
+        term.setBackgroundColor(
+            colors.blue
+        )
+
+    end
 
     term.setTextColor(
         colors.white
@@ -442,44 +471,146 @@ local function DrawButton(
 
 
     --------------------------------------------------
-    -- Button text
+    -- BUTTON TEXT
     --------------------------------------------------
 
     local text =
         button.name
 
 
-    if #text > width - 2 then
+    local maxWidth =
+        width - 2
 
-        text =
-            text:sub(
-                1,
-                width - 2
+
+    local lines = {}
+
+
+    --------------------------------------------------
+    -- WORD WRAP
+    --------------------------------------------------
+
+    while #text > maxWidth do
+
+        local breakAt = nil
+
+
+        for i = maxWidth, 1, -1 do
+
+            if text:sub(i, i) == " " then
+
+                breakAt = i
+
+                break
+
+            end
+
+        end
+
+
+        --------------------------------------------------
+        -- No space found
+        --------------------------------------------------
+
+        if not breakAt then
+
+            table.insert(
+                lines,
+                text:sub(
+                    1,
+                    maxWidth
+                )
             )
+
+            text =
+                text:sub(
+                    maxWidth + 1
+                )
+
+        else
+
+            table.insert(
+                lines,
+                text:sub(
+                    1,
+                    breakAt - 1
+                )
+            )
+
+            text =
+                text:sub(
+                    breakAt + 1
+                )
+
+        end
 
     end
 
 
-    local textX =
-        x
-        + math.floor(
-            (width - #text) / 2
+    if #text > 0 then
+
+        table.insert(
+            lines,
+            text
         )
 
+    end
 
-    local textY =
+
+    --------------------------------------------------
+    -- Limit lines to button height
+    --------------------------------------------------
+
+    if #lines > height then
+
+        lines =
+            {
+                unpack(
+                    lines,
+                    1,
+                    height
+                )
+            }
+
+    end
+
+
+    --------------------------------------------------
+    -- Vertical centering
+    --------------------------------------------------
+
+    local firstTextY =
         y
         + math.floor(
-            height / 2
+            (height - #lines) / 2
         )
 
 
-    term.setCursorPos(
-        textX,
-        textY
-    )
+    --------------------------------------------------
+    -- Draw wrapped text
+    --------------------------------------------------
 
-    term.write(text)
+    for lineIndex, line in ipairs(lines) do
+
+        local textX =
+            x
+            + math.floor(
+                (width - #line) / 2
+            )
+
+
+        local textY =
+            firstTextY
+            + lineIndex
+
+
+        term.setCursorPos(
+            textX,
+            textY
+        )
+
+        term.write(line)
+
+    end
 
 end
 
@@ -508,10 +639,6 @@ local function DrawNavigationButton(
     button.y2 = y + height - 1
 
 
-    --------------------------------------------------
-    -- Background
-    --------------------------------------------------
-
     term.setBackgroundColor(
         colors.gray
     )
@@ -537,10 +664,6 @@ local function DrawNavigationButton(
 
     end
 
-
-    --------------------------------------------------
-    -- Text
-    --------------------------------------------------
 
     local textX =
         x
@@ -619,9 +742,41 @@ end
 local function DialGate(gateID)
 
     --------------------------------------------------
-    -- Get gate using the button's ID/index
+    -- MANUAL DIAL
     --------------------------------------------------
+
+    if type(gateID) == "table" then
+
+        local dialPacket = {}
+
+        dialPacket.type =
+            "remoteDial"
+
+        dialPacket.gateInfo = {}
+
+        dialPacket.gateInfo.from = closestToMe.id
+            
+
+        dialPacket.gateInfo.to = "manual"
+        dialPacket.gateInfo.manualAddress = gateID
+
+
+        modem.transmit(
+            slaveRecieve,
+            slaveRecieve,
+            dialPacket
+        )
+        return true
+
+    end
+
+
+    --------------------------------------------------
+    -- NORMAL GATE DIAL
+    --------------------------------------------------
+
     local idToDial = gateID
+
     local gate =
         gateDB[idToDial]
 
@@ -638,10 +793,6 @@ local function DialGate(gateID)
     end
 
 
-    --------------------------------------------------
-    -- Print selected information
-    --------------------------------------------------
-
     print(
         "Dialing: "
         .. gate.name
@@ -652,10 +803,6 @@ local function DialGate(gateID)
         .. tostring(idToDial)
     )
 
-
-    --------------------------------------------------
-    -- Get address
-    --------------------------------------------------
 
     local address =
         gate.address
@@ -672,9 +819,11 @@ local function DialGate(gateID)
 
     dialPacket.gateInfo = {}
 
-    dialPacket.gateInfo.from = closestToMe.id
+    dialPacket.gateInfo.from =
+        closestToMe.id
 
-    dialPacket.gateInfo.to = idToDial
+    dialPacket.gateInfo.to =
+        idToDial
 
 
     --------------------------------------------------
@@ -695,6 +844,1120 @@ local function DialGate(gateID)
 
 
     return true
+
+end
+
+
+--------------------------------------------------
+-- MANUAL DIALING
+--------------------------------------------------
+
+local function ManualDial()
+
+    local screenWidth,
+        screenHeight =
+        term.getSize()
+
+
+    --------------------------------------------------
+    -- DRAW CHOICE SCREEN
+    --------------------------------------------------
+
+    local function DrawChoiceScreen(errorMessage)
+
+        term.setBackgroundColor(
+            colors.black
+        )
+
+        term.setTextColor(
+            colors.white
+        )
+
+        term.clear()
+
+
+        --------------------------------------------------
+        -- TITLE
+        --------------------------------------------------
+
+        local title =
+            "MANUAL DIALING"
+
+
+        local titleX =
+            math.floor(
+                (screenWidth - #title) / 2
+            ) + 1
+
+
+        term.setCursorPos(
+            titleX,
+            2
+        )
+
+        term.write(title)
+
+
+        --------------------------------------------------
+        -- TYPE BUTTON
+        --------------------------------------------------
+
+        local buttonWidth = 24
+        local buttonHeight = 3
+
+        local buttonX =
+            math.floor(
+                (screenWidth - buttonWidth) / 2
+            ) + 1
+
+
+        local typeButtonY = 5
+
+
+        term.setBackgroundColor(
+            colors.blue
+        )
+
+        term.setTextColor(
+            colors.white
+        )
+
+
+        for row = 0, buttonHeight - 1 do
+
+            term.setCursorPos(
+                buttonX,
+                typeButtonY + row
+            )
+
+            term.write(
+                string.rep(
+                    " ",
+                    buttonWidth
+                )
+            )
+
+        end
+
+
+        local typeText =
+            "TYPE ADDRESS"
+
+
+        local typeTextX =
+            buttonX
+            + math.floor(
+                (buttonWidth - #typeText) / 2
+            )
+
+
+        local typeTextY =
+            typeButtonY
+            + 1
+
+
+        term.setCursorPos(
+            typeTextX,
+            typeTextY
+        )
+
+        term.write(typeText)
+
+
+        --------------------------------------------------
+        -- PASTE BUTTON
+        --------------------------------------------------
+
+        local pasteButtonY =
+            typeButtonY
+            + buttonHeight
+            + 1
+
+
+        term.setBackgroundColor(
+            colors.green
+        )
+
+        term.setTextColor(
+            colors.white
+        )
+
+
+        for row = 0, buttonHeight - 1 do
+
+            term.setCursorPos(
+                buttonX,
+                pasteButtonY + row
+            )
+
+            term.write(
+                string.rep(
+                    " ",
+                    buttonWidth
+                )
+            )
+
+        end
+
+
+        local pasteText =
+            "PASTE ADDRESS"
+
+
+        local pasteTextX =
+            buttonX
+            + math.floor(
+                (buttonWidth - #pasteText) / 2
+            )
+
+
+        local pasteTextY =
+            pasteButtonY
+            + 1
+
+
+        term.setCursorPos(
+            pasteTextX,
+            pasteTextY
+        )
+
+        term.write(pasteText)
+
+
+        --------------------------------------------------
+        -- ERROR
+        --------------------------------------------------
+
+        if errorMessage then
+
+            local errorX =
+                math.floor(
+                    (screenWidth - #errorMessage) / 2
+                ) + 1
+
+
+            if errorX < 1 then
+                errorX = 1
+            end
+
+
+            term.setTextColor(
+                colors.red
+            )
+
+
+            term.setCursorPos(
+                errorX,
+                pasteButtonY
+                + buttonHeight
+                + 2
+            )
+
+            term.write(errorMessage)
+
+        end
+
+
+        --------------------------------------------------
+        -- ESC
+        --------------------------------------------------
+
+        local cancelText =
+            "Press ESC to cancel"
+
+
+        local cancelX =
+            math.floor(
+                (screenWidth - #cancelText) / 2
+            ) + 1
+
+
+        term.setTextColor(
+            colors.white
+        )
+
+
+        term.setCursorPos(
+            cancelX,
+            screenHeight - 1
+        )
+
+        term.write(cancelText)
+
+
+        return {
+            typeX1 = buttonX,
+            typeX2 = buttonX + buttonWidth - 1,
+
+            typeY1 = typeButtonY,
+            typeY2 = typeButtonY + buttonHeight - 1,
+
+            pasteX1 = buttonX,
+            pasteX2 = buttonX + buttonWidth - 1,
+
+            pasteY1 = pasteButtonY,
+            pasteY2 = pasteButtonY + buttonHeight - 1
+        }
+
+    end
+
+
+    --------------------------------------------------
+    -- PARSE PASTED ADDRESS
+    --------------------------------------------------
+
+    local function ParseAddress(text)
+
+        if type(text) ~= "string" then
+
+            return nil,
+                "Invalid pasted address"
+
+        end
+
+
+        local digits = {}
+
+
+        for number in text:gmatch("%d+") do
+
+            local value =
+                tonumber(number)
+
+
+            if value == nil then
+
+                return nil,
+                    "Invalid number in address"
+
+            end
+
+
+            if value < 0
+                or value > 38 then
+
+                return nil,
+                    "Values must be between 0 and 38"
+
+            end
+
+
+            table.insert(
+                digits,
+                value
+            )
+
+        end
+
+
+        --------------------------------------------------
+        -- Must contain exactly 9 values
+        --------------------------------------------------
+
+        if #digits ~= 9 then
+
+            return nil,
+                "Address must contain exactly 9 values"
+
+        end
+
+
+        return digits
+
+    end
+
+
+    --------------------------------------------------
+    -- TYPE ADDRESS
+    --------------------------------------------------
+
+    local function TypeAddress()
+
+        local digits = {}
+
+        local currentInput = ""
+
+
+        --------------------------------------------------
+        -- DRAW TYPING SCREEN
+        --------------------------------------------------
+
+        local function DrawTypingScreen(errorMessage)
+
+            term.setBackgroundColor(
+                colors.black
+            )
+
+            term.setTextColor(
+                colors.white
+            )
+
+            term.clear()
+
+
+            --------------------------------------------------
+            -- TITLE
+            --------------------------------------------------
+
+            local title =
+                "MANUAL DIALING"
+
+
+            local titleX =
+                math.floor(
+                    (screenWidth - #title) / 2
+                ) + 1
+
+
+            term.setCursorPos(
+                titleX,
+                1
+            )
+
+            term.write(title)
+
+
+            --------------------------------------------------
+            -- ADDRESS
+            --------------------------------------------------
+
+            local addressText = ""
+
+
+            for i = 1, 9 do
+
+                if digits[i] ~= nil then
+
+                    addressText =
+                        addressText
+                        .. tostring(
+                            digits[i]
+                        )
+
+                elseif i == #digits + 1 then
+
+                    addressText =
+                        addressText
+                        .. "["
+                        .. currentInput
+                        .. "_]"
+
+                else
+
+                    addressText =
+                        addressText
+                        .. "[ ]"
+
+                end
+
+
+                if i < 9 then
+
+                    addressText =
+                        addressText
+                        .. " "
+
+                end
+
+            end
+
+
+            local addressX =
+                math.floor(
+                    (screenWidth - #addressText) / 2
+                ) + 1
+
+
+            if addressX < 1 then
+                addressX = 1
+            end
+
+
+            term.setCursorPos(
+                addressX,
+                3
+            )
+
+            term.write(addressText)
+
+
+            --------------------------------------------------
+            -- INSTRUCTIONS
+            --------------------------------------------------
+
+            local instruction =
+                "Type 0-38, then press ENTER"
+
+
+            local instructionX =
+                math.floor(
+                    (screenWidth - #instruction) / 2
+                ) + 1
+
+
+            term.setCursorPos(
+                instructionX,
+                6
+            )
+
+            term.write(instruction)
+
+
+            --------------------------------------------------
+            -- PROGRESS
+            --------------------------------------------------
+
+            local progress =
+                "Address "
+                .. tostring(
+                    #digits + 1
+                )
+                .. " / 9"
+
+
+            if #digits >= 9 then
+
+                progress =
+                    "Address complete"
+
+            end
+
+
+            local progressX =
+                math.floor(
+                    (screenWidth - #progress) / 2
+                ) + 1
+
+
+            term.setCursorPos(
+                progressX,
+                8
+            )
+
+            term.write(progress)
+
+
+            --------------------------------------------------
+            -- ERROR
+            --------------------------------------------------
+
+            if errorMessage then
+
+                local errorX =
+                    math.floor(
+                        (screenWidth - #errorMessage) / 2
+                    ) + 1
+
+
+                if errorX < 1 then
+                    errorX = 1
+                end
+
+
+                term.setTextColor(
+                    colors.red
+                )
+
+
+                term.setCursorPos(
+                    errorX,
+                    10
+                )
+
+                term.write(errorMessage)
+
+            end
+
+
+            --------------------------------------------------
+            -- CANCEL
+            --------------------------------------------------
+
+            term.setTextColor(
+                colors.white
+            )
+
+
+            local cancelText =
+                "Press ESC to cancel"
+
+
+            local cancelX =
+                math.floor(
+                    (screenWidth - #cancelText) / 2
+                ) + 1
+
+
+            term.setCursorPos(
+                cancelX,
+                screenHeight - 1
+            )
+
+            term.write(cancelText)
+
+
+            --------------------------------------------------
+            -- CURSOR
+            --------------------------------------------------
+
+            local cursorX =
+                addressX
+                + #addressText
+
+
+            if cursorX > screenWidth then
+                cursorX = screenWidth
+            end
+
+
+            term.setCursorPos(
+                cursorX,
+                3
+            )
+
+        end
+
+
+        --------------------------------------------------
+        -- INITIAL DRAW
+        --------------------------------------------------
+
+        DrawTypingScreen()
+
+
+        --------------------------------------------------
+        -- INPUT LOOP
+        --------------------------------------------------
+
+        while #digits < 9 do
+
+            local event,
+                p1,
+                p2,
+                p3 =
+                os.pullEvent()
+
+
+            --------------------------------------------------
+            -- KEYBOARD CHARACTER
+            --------------------------------------------------
+
+            if event == "char" then
+
+                local character =
+                    p1
+
+
+                if character:match("%d") then
+
+                    if #currentInput < 2 then
+
+                        currentInput =
+                            currentInput
+                            .. character
+
+
+                        local value =
+                            tonumber(
+                                currentInput
+                            )
+
+
+                        if value > 38 then
+
+                            currentInput =
+                                ""
+
+
+                            DrawTypingScreen(
+                                "Value must be between 0 and 38"
+                            )
+
+                        else
+
+                            DrawTypingScreen()
+
+                        end
+
+                    end
+
+                end
+
+
+            --------------------------------------------------
+            -- KEY EVENTS
+            --------------------------------------------------
+
+            elseif event == "key" then
+
+
+                --------------------------------------------------
+                -- ENTER
+                --------------------------------------------------
+
+                if p1 == keys.enter
+                    or p1 == keys.numPadEnter then
+
+                    if currentInput == "" then
+
+                        DrawTypingScreen(
+                            "Enter a number from 0 to 38"
+                        )
+
+                    else
+
+                        local value =
+                            tonumber(
+                                currentInput
+                            )
+
+
+                        if value
+                            and value >= 0
+                            and value <= 38 then
+
+                            table.insert(
+                                digits,
+                                value
+                            )
+
+
+                            currentInput = ""
+
+
+                            DrawTypingScreen()
+
+                        else
+
+                            currentInput = ""
+
+
+                            DrawTypingScreen(
+                                "Value must be between 0 and 38"
+                            )
+
+                        end
+
+                    end
+
+
+                --------------------------------------------------
+                -- BACKSPACE
+                --------------------------------------------------
+
+                elseif p1 == keys.backspace then
+
+                    currentInput =
+                        currentInput:sub(
+                            1,
+                            #currentInput - 1
+                        )
+
+
+                    DrawTypingScreen()
+
+
+                --------------------------------------------------
+                -- ESC
+                --------------------------------------------------
+
+                elseif p1 == keys.esc then
+
+                    return nil
+
+                end
+
+            end
+
+        end
+
+
+        --------------------------------------------------
+        -- ADDRESS COMPLETE
+        --------------------------------------------------
+
+        return digits
+
+    end
+
+
+    --------------------------------------------------
+    -- CHOICE SCREEN
+    --------------------------------------------------
+
+    local choiceButtons =
+        DrawChoiceScreen()
+
+
+    --------------------------------------------------
+    -- CHOICE LOOP
+    --------------------------------------------------
+
+    while true do
+
+        local event,
+            p1,
+            p2,
+            p3 =
+            os.pullEvent()
+
+
+        --------------------------------------------------
+        -- ESC
+        --------------------------------------------------
+
+        if event == "key"
+            and p1 == keys.esc then
+
+            return nil
+
+        end
+
+
+        --------------------------------------------------
+        -- BUTTON CLICK
+        --------------------------------------------------
+
+        if event == "mouse_click" then
+
+            local x =
+                p2
+
+            local y =
+                p3
+
+
+            --------------------------------------------------
+            -- TYPE ADDRESS
+            --------------------------------------------------
+
+            if x >= choiceButtons.typeX1
+                and x <= choiceButtons.typeX2
+                and y >= choiceButtons.typeY1
+                and y <= choiceButtons.typeY2 then
+
+
+                local digits =
+                    TypeAddress()
+
+
+                if digits then
+
+                    term.setBackgroundColor(
+                        colors.black
+                    )
+
+                    term.setTextColor(
+                        colors.white
+                    )
+
+                    term.clear()
+
+                    term.setCursorPos(
+                        1,
+                        1
+                    )
+
+
+                    print(
+                        "Manual address:"
+                    )
+
+                    print(
+                        textutils.serialize(
+                            digits
+                        )
+                    )
+
+
+                    DialGate(
+                        digits
+                    )
+
+
+                    return digits
+
+                else
+
+                    choiceButtons =
+                        DrawChoiceScreen()
+
+                end
+
+
+            --------------------------------------------------
+            -- PASTE ADDRESS
+            --------------------------------------------------
+
+            elseif x >= choiceButtons.pasteX1
+                and x <= choiceButtons.pasteX2
+                and y >= choiceButtons.pasteY1
+                and y <= choiceButtons.pasteY2 then
+
+
+                --------------------------------------------------
+                -- Show paste instructions
+                --------------------------------------------------
+
+                term.setBackgroundColor(
+                    colors.black
+                )
+
+                term.setTextColor(
+                    colors.white
+                )
+
+                term.clear()
+
+
+                local title =
+                    "PASTE ADDRESS"
+
+
+                local titleX =
+                    math.floor(
+                        (screenWidth - #title) / 2
+                    ) + 1
+
+
+                term.setCursorPos(
+                    titleX,
+                    2
+                )
+
+                term.write(title)
+
+
+                local instruction =
+                    "Paste the address now"
+
+
+                local instructionX =
+                    math.floor(
+                        (screenWidth - #instruction) / 2
+                    ) + 1
+
+
+                term.setCursorPos(
+                    instructionX,
+                    5
+                )
+
+                term.write(instruction)
+
+                local instruction =
+                    "Example:"
+
+
+                local instructionX =
+                    math.floor(
+                        (screenWidth - #instruction) / 2
+                    ) + 1
+
+
+                term.setCursorPos(
+                    instructionX,
+                    7
+                )
+
+                term.write(instruction)
+
+
+                local example =
+                    "-18-21-15-31-5-10-29-7-0-"
+
+
+                local exampleX =
+                    math.floor(
+                        (screenWidth - #example) / 2
+                    ) + 1
+
+
+                if exampleX < 1 then
+                    exampleX = 1
+                end
+
+
+                term.setCursorPos(
+                    exampleX,
+                    9
+                )
+
+                term.write(example)
+
+
+                local cancelText =
+                    "Press ESC to cancel"
+
+
+                local cancelX =
+                    math.floor(
+                        (screenWidth - #cancelText) / 2
+                    ) + 1
+
+
+                term.setCursorPos(
+                    cancelX,
+                    screenHeight - 1
+                )
+
+                term.write(cancelText)
+
+
+                --------------------------------------------------
+                -- WAIT FOR PASTE
+                --------------------------------------------------
+
+                while true do
+
+                    local pasteEvent,
+                        pasteData =
+                        os.pullEvent()
+
+
+                    --------------------------------------------------
+                    -- PASTE
+                    --------------------------------------------------
+
+                    if pasteEvent == "paste" then
+
+                        local digits,
+                            errorMessage =
+                            ParseAddress(
+                                pasteData
+                            )
+
+
+                        if digits then
+
+                            --------------------------------------------------
+                            -- Valid address
+                            --------------------------------------------------
+
+                            term.setBackgroundColor(
+                                colors.black
+                            )
+
+                            term.setTextColor(
+                                colors.white
+                            )
+
+                            term.clear()
+
+                            term.setCursorPos(
+                                1,
+                                1
+                            )
+
+
+--[[                             print(
+                                "Pasted address:"
+                            )
+
+                            print(
+                                textutils.serialize(
+                                    digits
+                                )
+                            )
+ ]]
+
+                            DialGate(
+                                digits
+                            )
+
+
+                            return digits
+
+                        else
+
+                            --------------------------------------------------
+                            -- Invalid address
+                            --------------------------------------------------
+
+                            term.setBackgroundColor(
+                                colors.black
+                            )
+
+                            term.setTextColor(
+                                colors.red
+                            )
+
+                            term.clear()
+
+
+                            local errorX =
+                                math.floor(
+                                    (
+                                        screenWidth
+                                        - #errorMessage
+                                    ) / 2
+                                ) + 1
+
+
+                            if errorX < 1 then
+                                errorX = 1
+                            end
+
+
+                            term.setCursorPos(
+                                errorX,
+                                5
+                            )
+
+                            term.write(
+                                errorMessage
+                            )
+
+
+                            term.setTextColor(
+                                colors.white
+                            )
+
+
+                            local retryText =
+                                "Press ESC to cancel"
+
+
+                            local retryX =
+                                math.floor(
+                                    (
+                                        screenWidth
+                                        - #retryText
+                                    ) / 2
+                                ) + 1
+
+
+                            term.setCursorPos(
+                                retryX,
+                                screenHeight - 1
+                            )
+
+                            term.write(retryText)
+
+                        end
+
+
+                    --------------------------------------------------
+                    -- ESC
+                    --------------------------------------------------
+
+                    elseif pasteEvent == "key"
+                        and pasteData == keys.esc then
+
+                        choiceButtons =
+                            DrawChoiceScreen()
+
+                        break
+
+                    end
+
+                end
+
+            end
+
+        end
+
+    end
 
 end
 
@@ -796,10 +2059,6 @@ local function GateMenu()
 
     local function DrawPage()
 
-        --------------------------------------------------
-        -- TOTAL PAGES
-        --------------------------------------------------
-
         local totalPages =
             math.max(
                 1,
@@ -808,10 +2067,6 @@ local function GateMenu()
                 )
             )
 
-
-        --------------------------------------------------
-        -- Make sure current page is still valid
-        --------------------------------------------------
 
         if currentPage > totalPages then
 
@@ -827,10 +2082,6 @@ local function GateMenu()
         end
 
 
-        --------------------------------------------------
-        -- Reset colors
-        --------------------------------------------------
-
         term.setBackgroundColor(
             colors.black
         )
@@ -838,7 +2089,6 @@ local function GateMenu()
         term.setTextColor(
             colors.white
         )
-
 
         term.clear()
 
@@ -866,7 +2116,7 @@ local function GateMenu()
 
 
         --------------------------------------------------
-        -- SHOW CURRENT CLOSEST GATE
+        -- CLOSEST GATE
         --------------------------------------------------
 
         if closestToMe then
@@ -935,7 +2185,7 @@ local function GateMenu()
 
 
         --------------------------------------------------
-        -- DRAW GATE BUTTONS
+        -- DRAW BUTTONS
         --------------------------------------------------
 
         for i = pageStart, pageEnd do
@@ -1013,10 +2263,6 @@ local function GateMenu()
             nil
 
 
-        --------------------------------------------------
-        -- PREVIOUS
-        --------------------------------------------------
-
         if currentPage > 1 then
 
             previousButton =
@@ -1030,10 +2276,6 @@ local function GateMenu()
 
         end
 
-
-        --------------------------------------------------
-        -- NEXT
-        --------------------------------------------------
 
         if currentPage < totalPages then
 
@@ -1086,10 +2328,6 @@ local function GateMenu()
         )
 
 
-        --------------------------------------------------
-        -- RETURN CURRENT PAGE DATA
-        --------------------------------------------------
-
         return pageStart,
             pageEnd,
             previousButton,
@@ -1099,7 +2337,7 @@ local function GateMenu()
 
 
     --------------------------------------------------
-    -- START DISTANCE REFRESH TIMER
+    -- START REFRESH TIMER
     --------------------------------------------------
 
     local refreshTimer =
@@ -1109,7 +2347,7 @@ local function GateMenu()
 
 
     --------------------------------------------------
-    -- START 2 MINUTE TIMEOUT
+    -- START TIMEOUT
     --------------------------------------------------
 
     local shutdownTimer =
@@ -1131,10 +2369,6 @@ local function GateMenu()
             DrawPage()
 
 
-        --------------------------------------------------
-        -- WAIT FOR EVENT
-        --------------------------------------------------
-
         local event,
             p1,
             p2,
@@ -1143,16 +2377,12 @@ local function GateMenu()
 
 
         --------------------------------------------------
-        -- PERIODIC DISTANCE CHECK
+        -- DISTANCE REFRESH
         --------------------------------------------------
 
         if event == "timer"
             and p1 == refreshTimer then
 
-
-            --------------------------------------------------
-            -- Save the old closest gate
-            --------------------------------------------------
 
             local oldClosestID =
                 closestToMe
@@ -1166,18 +2396,9 @@ local function GateMenu()
                 or nil
 
 
-            --------------------------------------------------
-            -- Find the new closest gate
-            --------------------------------------------------
-
             local newClosestGate =
                 FindClosestGate()
 
-
-            --------------------------------------------------
-            -- If there is no gate within 100 blocks,
-            -- stop drawing the menu and shut down.
-            --------------------------------------------------
 
             if not newClosestGate then
 
@@ -1187,10 +2408,6 @@ local function GateMenu()
 
             end
 
-
-            --------------------------------------------------
-            -- Determine whether anything changed
-            --------------------------------------------------
 
             local newClosestID =
                 newClosestGate
@@ -1207,20 +2424,12 @@ local function GateMenu()
             local closestChanged = false
 
 
-            --------------------------------------------------
-            -- Gate changed
-            --------------------------------------------------
-
             if oldClosestID ~= newClosestID then
 
                 closestChanged = true
 
             end
 
-
-            --------------------------------------------------
-            -- Distance changed
-            --------------------------------------------------
 
             if oldClosestDistance ~= newClosestDistance then
 
@@ -1229,18 +2438,10 @@ local function GateMenu()
             end
 
 
-            --------------------------------------------------
-            -- Update button list / screen
-            --------------------------------------------------
-
             if closestChanged then
 
                 BuildButtons()
 
-
-                --------------------------------------------------
-                -- Keep current page valid
-                --------------------------------------------------
 
                 local totalPages =
                     math.max(
@@ -1267,10 +2468,6 @@ local function GateMenu()
             end
 
 
-            --------------------------------------------------
-            -- Start another refresh timer
-            --------------------------------------------------
-
             refreshTimer =
                 os.startTimer(
                     DISTANCE_REFRESH_INTERVAL
@@ -1278,7 +2475,7 @@ local function GateMenu()
 
 
         --------------------------------------------------
-        -- 2 MINUTE TIMEOUT
+        -- TIMEOUT
         --------------------------------------------------
 
         elseif event == "timer"
@@ -1296,19 +2493,14 @@ local function GateMenu()
 
 
         --------------------------------------------------
-        -- TOUCH EVENT
+        -- TOUCH
         --------------------------------------------------
 
         elseif event == "mouse_click" then
 
-
             local x = p2
             local y = p3
 
-
-            --------------------------------------------------
-            -- FIND WHICH GATE BUTTON WAS TOUCHED
-            --------------------------------------------------
 
             local button =
                 GetButtonAt(
@@ -1320,105 +2512,117 @@ local function GateMenu()
 
 
             --------------------------------------------------
-            -- GATE BUTTON PRESSED
+            -- BUTTON PRESSED
             --------------------------------------------------
 
             if button then
 
-                local gateID =
-                    button.id
-
-
-                local gate =
-                    gateDB[gateID]
-
-
-                local address =
-                    gate.address
-
-
                 --------------------------------------------------
-                -- SHOW FEEDBACK
+                -- MANUAL DIALING
                 --------------------------------------------------
 
-                term.setBackgroundColor(
-                    colors.black
-                )
+                if button.manual then
 
-                term.setTextColor(
-                    colors.white
-                )
+                    local result =
+                        ManualDial()
 
 
-                local bottomY =
-                    screenHeight
+                    if result then
+
+                        return result
+
+                    end
+
+                else
+
+                    --------------------------------------------------
+                    -- NORMAL GATE
+                    --------------------------------------------------
+
+                    local gateID =
+                        button.id
 
 
-                term.setCursorPos(
-                    1,
-                    bottomY
-                )
+                    local gate =
+                        gateDB[gateID]
 
 
-                term.clearLine()
+                    local address =
+                        gate.address
 
 
-                term.write(
-                    "Index: "
-                    .. tostring(gateID)
-                )
+                    term.setBackgroundColor(
+                        colors.black
+                    )
+
+                    term.setTextColor(
+                        colors.white
+                    )
 
 
-                print(
-                    "Selected: "
-                    .. gate.name
-                )
+                    local bottomY =
+                        screenHeight
 
 
-                print(
-                    "Index: "
-                    .. tostring(gateID)
-                )
+                    term.setCursorPos(
+                        1,
+                        bottomY
+                    )
 
 
-                print(
-                    "Address: "
-                    .. textutils.serialize(address)
-                )
+                    term.clearLine()
 
 
-                --------------------------------------------------
-                -- CLEAR SCREEN
-                --------------------------------------------------
-
-                term.setBackgroundColor(
-                    colors.black
-                )
-
-                term.clear()
-
-                term.setCursorPos(
-                    1,
-                    1
-                )
+                    term.write(
+                        "Index: "
+                        .. tostring(gateID)
+                    )
 
 
-                --------------------------------------------------
-                -- DIAL
-                --------------------------------------------------
-
-                DialGate(
-                    gateID
-                )
+                    print(
+                        "Selected: "
+                        .. gate.name
+                    )
 
 
-                return gateID
+                    print(
+                        "Index: "
+                        .. tostring(gateID)
+                    )
+
+
+                    print(
+                        "Address: "
+                        .. textutils.serialize(address)
+                    )
+
+
+                    term.setBackgroundColor(
+                        colors.black
+                    )
+
+                    term.clear()
+
+                    term.setCursorPos(
+                        1,
+                        1
+                    )
+
+
+                    DialGate(
+                        gateID
+                    )
+
+
+                    return gateID
+
+                end
 
             end
 
 
             --------------------------------------------------
-            -- PREVIOUS BUTTON
+            -- PREVIOUS
             --------------------------------------------------
 
             if previousButton then
@@ -1444,7 +2648,7 @@ local function GateMenu()
 
 
             --------------------------------------------------
-            -- NEXT BUTTON
+            -- NEXT
             --------------------------------------------------
 
             if nextButton then
@@ -1517,41 +2721,21 @@ BuildButtons()
 
 
 --------------------------------------------------
--- CHECK FOR GATES
---------------------------------------------------
-
-if #buttons == 0 then
-
-    term.setBackgroundColor(
-        colors.black
-    )
-
-    term.clear()
-
-    term.setCursorPos(
-        1,
-        1
-    )
-
-    print(
-        "No gates available."
-    )
-
-    return
-
-end
-
-
---------------------------------------------------
 -- SHOW MENU
 --------------------------------------------------
 
 GateMenu()
 
 
+--------------------------------------------------
+-- WRITE TO TERMINAL
+--------------------------------------------------
+
 local function WriteToTerminal(data)
 
-    local width, height = term.getSize()
+    local width, height =
+        term.getSize()
+
 
     --------------------------------------------------
     -- Convert value to string
@@ -1560,12 +2744,15 @@ local function WriteToTerminal(data)
     local function ValueToString(value)
 
         if type(value) == "table" then
+
             return textutils.serialize(value)
 
         elseif value == nil then
+
             return "nil"
 
         else
+
             return tostring(value)
 
         end
@@ -1574,53 +2761,61 @@ local function WriteToTerminal(data)
 
 
     --------------------------------------------------
-    -- Word-wrap a string
+    -- Word-wrap
     --------------------------------------------------
 
     local function WrapText(text)
 
         local result = {}
 
+
         while #text > width do
 
-            -- Look for the last space that fits
             local breakAt = nil
+
 
             for i = width, 1, -1 do
 
                 if text:sub(i, i) == " " then
+
                     breakAt = i
+
                     break
+
                 end
 
             end
 
 
-            --------------------------------------------------
-            -- No space found
-            -- Force a break at the screen edge
-            --------------------------------------------------
-
             if not breakAt then
 
                 table.insert(
                     result,
-                    text:sub(1, width)
+                    text:sub(
+                        1,
+                        width
+                    )
                 )
 
                 text =
-                    text:sub(width + 1)
+                    text:sub(
+                        width + 1
+                    )
 
             else
 
                 table.insert(
                     result,
-                    text:sub(1, breakAt - 1)
+                    text:sub(
+                        1,
+                        breakAt - 1
+                    )
                 )
 
-                -- Remove the space we broke on
                 text =
-                    text:sub(breakAt + 1)
+                    text:sub(
+                        breakAt + 1
+                    )
 
             end
 
@@ -1631,6 +2826,7 @@ local function WriteToTerminal(data)
             result,
             text
         )
+
 
         return result
 
@@ -1690,7 +2886,7 @@ local function WriteToTerminal(data)
 
 
     --------------------------------------------------
-    -- Clear screen
+    -- Clear
     --------------------------------------------------
 
     term.setBackgroundColor(
@@ -1705,7 +2901,7 @@ local function WriteToTerminal(data)
 
 
     --------------------------------------------------
-    -- Vertically center all lines
+    -- Center vertically
     --------------------------------------------------
 
     local startY =
@@ -1715,12 +2911,14 @@ local function WriteToTerminal(data)
 
 
     if startY < 1 then
+
         startY = 1
+
     end
 
 
     --------------------------------------------------
-    -- Draw lines
+    -- Draw
     --------------------------------------------------
 
     for i, line in ipairs(lines) do
@@ -1730,18 +2928,17 @@ local function WriteToTerminal(data)
 
 
         if y > height then
+
             break
+
         end
 
-
-        --------------------------------------------------
-        -- Fill the entire row
-        --------------------------------------------------
 
         term.setCursorPos(
             1,
             y
         )
+
 
         term.write(
             string.rep(
@@ -1750,10 +2947,6 @@ local function WriteToTerminal(data)
             )
         )
 
-
-        --------------------------------------------------
-        -- Center the text
-        --------------------------------------------------
 
         local textWidth =
             #line
@@ -1766,7 +2959,9 @@ local function WriteToTerminal(data)
 
 
         if x < 1 then
+
             x = 1
+
         end
 
 
@@ -1775,6 +2970,7 @@ local function WriteToTerminal(data)
             y
         )
 
+
         term.write(line)
 
     end
@@ -1782,8 +2978,16 @@ local function WriteToTerminal(data)
 end
 
 
+--------------------------------------------------
+-- WAIT FOR CALLBACKS
+--------------------------------------------------
+
 local waitForCallbacks = true
-local stuckTimeout = os.startTimer(5)
+
+local stuckTimeout =
+    os.startTimer(5)
+
+
 while waitForCallbacks do
 
     local event,
@@ -1795,37 +2999,55 @@ while waitForCallbacks do
         os.pullEvent()
 
 
-    if event == "modem_message" and channel == slaveRecieve
+    if event == "modem_message"
+        and channel == slaveRecieve
         and message.type then
+
 
         if message.type == "dialerCallback" then
 
             if message.id == closestToMe.id then
 
-              WriteToTerminal(
-                message.callbackData
-              )
-              stuckTimeout = os.startTimer(5)
+                WriteToTerminal(
+                    message.callbackData
+                )
+
+                stuckTimeout =
+                    os.startTimer(5)
+
             end
+
 
         elseif message.type == "dialerCallbackTerm" then
 
             WriteToTerminal(
-              message.callbackData
+                message.callbackData
             )
 
             waitForCallbacks = false
-            stuckTimeout = os.startTimer(6)
+
+            stuckTimeout =
+                os.startTimer(6)
+
             sleep(5)
 
             break
+
         end
 
-    elseif event == "timer" and side == stuckTimeout then
-      WriteToTerminal("Timeout Error")
-      break
+
+    elseif event == "timer"
+        and side == stuckTimeout then
+
+        WriteToTerminal(
+            "Timeout Error"
+        )
+
+        break
+
     end
 
 end
+
 
 os.shutdown()

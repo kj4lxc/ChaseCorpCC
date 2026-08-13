@@ -321,7 +321,7 @@ local feedback = {
     }
 }
 local gateDB = {}
-local VERSION = "1.0.1"
+local VERSION = "1.0.2"
 
 local function dialMilky(address)
   local addressLength = #address    
@@ -677,27 +677,34 @@ while true do
     end
     if channel == slaveRecieve and message.type == "remoteDial" and message.gateInfo.from == config.uuid then
       local address = {}
+      local manual = false
       if message.gateInfo.to == "manual" then
         print("manual dial")
         connectedName = "MANUAL DIAL"
         address = message.gateInfo.manualAddress
+        manual = true
       else
         local gate = gateDB[message.gateInfo.to]
         address = gate.address
         connectedName = gate.name
         connectedAddress = "" 
       end
-      
-      for i, index in pairs(address) do
-        if i == #address then
-          break
+      if manual then
+        connectedAddress = "--REDACTED--"
+      else
+        for i, index in pairs(address) do
+          if i == #address then
+            break
+          end
+          if i < #address-1 then
+            connectedAddress = connectedAddress..index.."-"
+          else
+            connectedAddress = connectedAddress..index
+          end
+
         end
-        if i < #address-1 then
-          connectedAddress = connectedAddress..index.."-"
-        else
-          connectedAddress = connectedAddress..index
-        end 
       end
+      
       sleep(.2)
       local wormHoleData = {
                 ["Status"] = "Dialing Sequence",
