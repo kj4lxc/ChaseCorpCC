@@ -3,7 +3,7 @@ local DISTANCE_REFRESH_INTERVAL = 10
 local DIAL_TIMEOUT = 120
 local slaveSend = 54385
 local slaveRecieve = 54384
-local VERSION = "1.0.1"
+local VERSION = "1.0.2"
 local gateDB = {}
 os.setComputerLabel("PocketDialer v."..VERSION)
 

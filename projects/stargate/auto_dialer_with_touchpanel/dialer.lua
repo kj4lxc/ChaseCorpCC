@@ -321,7 +321,7 @@ local feedback = {
     }
 }
 local gateDB = {}
-local VERSION = "1.0.2"
+local VERSION = "1.0.3"
 
 local function dialMilky(address)
   local addressLength = #address    
